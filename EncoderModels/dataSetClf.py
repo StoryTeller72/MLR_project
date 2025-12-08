@@ -4,10 +4,12 @@ import os
 import glob
 import numpy as np
 
-class PointCloudDataset(Dataset):
-    def __init__(self, base_dir):
+class PointCloudDatasetClf(Dataset):
+    def __init__(self, base_dir, class_amnt, class_mapping):
+        self.class_amnt = class_amnt
         self.base_dir = base_dir
         self.file_pairs = []
+        self.mapping = class_mapping
         for category_name in os.listdir(base_dir):
             category_path = os.path.join(base_dir, category_name)
             if os.path.isdir(category_path):
@@ -37,14 +39,11 @@ class PointCloudDataset(Dataset):
         object_class = self.file_pairs[idx]['class']
         try:
             point_cloud = np.load(pc_path).astype(np.float32)
-            segment_labels = np.load(seg_path).astype(np.int64) 
         except Exception as e:
             print(f"Ошибка загрузки файлов {pc_path} или {seg_path}: {e}")
             return self[idx + 1] 
 
         point_cloud = torch.from_numpy(point_cloud)
-        segment_labels = torch.from_numpy(segment_labels)
-
-
-        return point_cloud, segment_labels, object_class
+        object_class= self.mapping[object_class]
+        return (point_cloud, object_class)
 
