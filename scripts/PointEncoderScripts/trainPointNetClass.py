@@ -17,13 +17,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-
-def train(model, train_loader, test_loader=None, 
-          epochs=20, lr=1e-3, device=None):
+def train(model, train_loader, test_loader=None, model_name = None, 
+          epochs=20, lr=1e-3, device=None, save_freq=None, save_path_base=None):
    
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -56,6 +51,12 @@ def train(model, train_loader, test_loader=None,
 
         print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_acc:.4f}")
 
+        if epoch and epoch % save_freq == 0:
+            backbone_path =  save_path_base + f"/{model_name}/class_{epoch}.pth"
+            full_model_path =  save_path_base + f"/{model_name}/full_model_class_{epoch}.pth"
+            torch.save(model.backbone.state_dict(), backbone_path)
+            torch.save(model.state_dict(), full_model_path)
+            print(f"Backbone сохранён в {backbone_path}")
       
         if test_loader is not None:
             model.eval()
@@ -78,22 +79,26 @@ def train(model, train_loader, test_loader=None,
             val_loss /= len(test_loader.dataset)
             val_acc = val_correct / val_total
             print(f"  Validation Loss: {val_loss:.4f} | Validation Acc: {val_acc:.4f}")
+        
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    epoch = 10
     parser.add_argument('--extractor_name', type=str, default="smallpn")
+    parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--pretrain_path', type=str, default=None)
     parser.add_argument('--save_freq', type=int, default=1)
     args = parser.parse_args()
 
+
     extractor_name = args.extractor_name
+    epochs = args.epochs
     if extractor_name == "smallpn":
         net = PointNet()
-    elif extractor_name == "medium":
+    elif extractor_name == "mediumpn":
         net =  PointNetMedium()
-    else:
+    elif extractor_name == "largepn":
         net = PointNetLarge()
+    save_freq = args.save_freq
     print('PointNetArchetecture')
     print(net)
 
@@ -115,4 +120,6 @@ if __name__ == '__main__':
 
     print(f"Train size:{train_size}, Test size: {test_size}")
 
-    train(pointNetCls, train_loader, test_loader, epoch)
+    save_path = f"../../artifacts/Encoders"
+
+    train(model=pointNetCls, train_loader=train_loader, test_loader=test_loader, model_name=extractor_name, epochs=epochs, save_path_base=save_path, save_freq=save_freq)
