@@ -4,7 +4,7 @@ import os
 import glob
 import numpy as np
 
-class PointCloudDatasetSet(Dataset):
+class PointCloudDatasetSetSeg(Dataset):
     def __init__(self, base_dir):
         self.base_dir = base_dir
         self.file_pairs = []
@@ -43,6 +43,6 @@ class PointCloudDatasetSet(Dataset):
             return self[idx + 1] 
 
         point_cloud = torch.from_numpy(point_cloud)
-        segment_labels = torch.from_numpy(segment_labels)
+        segment_labels = torch.from_numpy(segment_labels).argmax(1)
         return point_cloud, segment_labels
 

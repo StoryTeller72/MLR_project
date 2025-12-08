@@ -51,7 +51,7 @@ def train(model, train_loader, test_loader=None, model_name = None,
 
         print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_acc:.4f}")
 
-        if epoch and epoch % save_freq == 0:
+        if epoch and (epoch + 1) % save_freq == 0:
             backbone_path =  save_path_base + f"/{model_name}/class_{epoch}.pth"
             full_model_path =  save_path_base + f"/{model_name}/full_model_class_{epoch}.pth"
             torch.save(model.backbone.state_dict(), backbone_path)

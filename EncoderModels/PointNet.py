@@ -126,3 +126,97 @@ class PointNetClassifier(nn.Module):
         features = self.backbone(x)   
         out = self.fc(features)       
         return out
+
+
+class PointNetBackboneSeg(nn.Module):
+    def __init__(self, point_channel=3, output_dim=256):
+        super().__init__()
+        in_channel = point_channel
+        self.local_mlp = nn.Sequential(
+            nn.Linear(in_channel, 64),
+            nn.GELU(),
+            nn.Linear(64, output_dim),
+        )
+        self.reset_parameters_()
+
+    def reset_parameters_(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        point_features = self.local_mlp(x)  # (B, N, 256)
+        return point_features
+    
+class PointNetBackboneSegMedium(nn.Module):
+    def __init__(self, point_channel=3, output_dim=256):
+        super().__init__()
+        in_channel = point_channel
+        self.local_mlp = nn.Sequential(
+            nn.Linear(in_channel, 64),
+            nn.GELU(),
+            nn.Linear(64, 64),
+            nn.GELU(),
+            nn.Linear(64, 128),
+            nn.GELU(),
+            nn.Linear(128, output_dim),
+        )
+        self.reset_parameters_()
+
+    def reset_parameters_(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        point_features = self.local_mlp(x)  # (B, N, 256)
+        return point_features
+    
+
+class PointNetBackboneSegLarge(nn.Module):
+    def __init__(self, point_channel=3, output_dim=256):
+        super().__init__()
+        in_channel = point_channel
+        self.local_mlp = nn.Sequential(
+            nn.Linear(in_channel, 64),
+            nn.GELU(),
+            nn.Linear(64, 64),
+            nn.GELU(),
+            nn.Linear(64, 128),
+            nn.GELU(),
+            nn.Linear(128, 128),
+            nn.GELU(),
+            nn.Linear(128, 256),
+            nn.GELU(),
+            nn.Linear(256, output_dim),
+        )
+
+        self.reset_parameters_()
+
+    def reset_parameters_(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        point_features = self.local_mlp(x)  # (B, N, 256)
+        return point_features
+    
+
+class PointNetSegmentationHead(nn.Module):
+    def __init__(self, backbone, num_classes=4):
+        super().__init__()
+        self.backbone = backbone
+        self.seg_head = nn.Linear(256, num_classes)
+
+    def forward(self, x):
+        point_features = self.backbone(x)  # (B, N, 256)
+        logits = self.seg_head(point_features)  # (B, N, num_classes)
+        return logits
+
