@@ -355,6 +355,10 @@ class PointNetImaginationExtractorGP(BaseFeaturesExtractor):
         elif extractor_name == "largepn":
             from stable_baselines3.networks.pretrain_nets import PointNetLarge
             self.extractor = PointNetLarge()
+        elif extractor_name == "pn2":
+            print(' i find this place')
+            from stable_baselines3.networks import pretrain_nets
+            self.extractor = pretrain_nets.PointNet2Lite()
         else:
             raise NotImplementedError(f"Extractor {extractor_name} not implemented. Available:\
              smallpn, mediumpn, largepn")

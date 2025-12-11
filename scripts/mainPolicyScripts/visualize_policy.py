@@ -40,7 +40,7 @@ if __name__ == '__main__':
                      rand_degree=rand_degree)
 
     policy = PPO.load(checkpoint_path, env, 'cuda:0',
-                      policy_kwargs=get_3d_policy_kwargs(extractor_name='smallpn'),
+                      policy_kwargs=get_3d_policy_kwargs(extractor_name='pn2'),
                       check_obs_space=False, force_load=True)
 
     while True:
