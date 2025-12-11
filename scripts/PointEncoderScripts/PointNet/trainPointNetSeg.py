@@ -15,8 +15,8 @@ import argparse
 
 import sys
 sys.path.append(os.path.abspath('../..')) 
-from EncoderModels.PointNet import PointNetBackboneSeg, PointNetBackboneSegMedium, PointNetBackboneSegLarge, PointNetSegmentationHead
-from EncoderModels.dataSetSeg import PointCloudDatasetSetSeg
+from EncoderModels.PointNet  import PointNet, PointNetMedium, PointNetLarge, PointNetSegmentationHead
+from scripts.PointEncoderScripts.DataSetSeg import PointCloudDatasetSetSeg
 
 def train_segmentation(model, train_loader, test_loader=None, epochs=10, lr=1e-4, save_freq=None, save_path_base=None,  model_name = None, device=None):
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,11 +88,11 @@ if __name__ == '__main__':
     extractor_name = args.extractor_name
     epochs = args.epochs
     if extractor_name == "smallpn":
-        backBone = PointNetBackboneSeg()
+        backBone = PointNet()
     elif extractor_name == "mediumpn":
-        backBone =  PointNetBackboneSegMedium()
+        backBone =  PointNetMedium()
     elif extractor_name == "largepn":
-        backBone = PointNetBackboneSegLarge()
+        backBone = PointNetLarge()
     save_freq = args.save_freq
     print('PointNetArchetecture')
     print(backBone)

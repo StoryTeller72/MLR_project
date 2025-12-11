@@ -37,7 +37,6 @@ if __name__ == "__main__":
             coordinate = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05, origin=[0, 0, 0])
             if i % 5 == 0:
                 np.savetxt(f"/home/rustam/ProjectMy/dexartEnv/assets/data/segmentation/{task_name}/{task_name}_{iter}.txt", obs['instance_1-seg_gt'])
-                np.savetxt(f"/home/rustam/ProjectMy/dexartEnv/assets/data/pointClouds/{task_name}/{task_name}_pc_{iter}.txt", obs['instance_1-point_cloud'])
                 iter += 1
     o3d.visualization.draw_geometries([pc, coordinate], zoom=1,
                                       front=origin - target,

@@ -128,74 +128,9 @@ class PointNetClassifier(nn.Module):
         return out
 
 
-class PointNetBackboneSeg(nn.Module):
-    def __init__(self, point_channel=3, output_dim=256):
-        super().__init__()
-        in_channel = point_channel
-        self.local_mlp = nn.Sequential(
-            nn.Linear(in_channel, 64),
-            nn.GELU(),
-            nn.Linear(64, output_dim),
-        )
-        self.reset_parameters_()
-
-    def reset_parameters_(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.trunc_normal_(m.weight, std=.02)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-    def forward(self, x):
-        point_features = self.local_mlp(x)  # (B, N, 256)
-        return point_features
-    
-class PointNetBackboneSegMedium(nn.Module):
-    def __init__(self, point_channel=3, output_dim=256):
-        super().__init__()
-        in_channel = point_channel
-        self.local_mlp = nn.Sequential(
-            nn.Linear(in_channel, 64),
-            nn.GELU(),
-            nn.Linear(64, 64),
-            nn.GELU(),
-            nn.Linear(64, 128),
-            nn.GELU(),
-            nn.Linear(128, output_dim),
-        )
-        self.reset_parameters_()
-
-    def reset_parameters_(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.trunc_normal_(m.weight, std=.02)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-    def forward(self, x):
-        point_features = self.local_mlp(x)  # (B, N, 256)
-        return point_features
+class PointNet(nn.Module): # actually pointnet
     
 
-class PointNetBackboneSegLarge(nn.Module):
-    def __init__(self, point_channel=3, output_dim=256):
-        super().__init__()
-        in_channel = point_channel
-        self.local_mlp = nn.Sequential(
-            nn.Linear(in_channel, 64),
-            nn.GELU(),
-            nn.Linear(64, 64),
-            nn.GELU(),
-            nn.Linear(64, 128),
-            nn.GELU(),
-            nn.Linear(128, 128),
-            nn.GELU(),
-            nn.Linear(128, 256),
-            nn.GELU(),
-            nn.Linear(256, output_dim),
-        )
-
-        self.reset_parameters_()
 
     def reset_parameters_(self):
         for m in self.modules():
@@ -205,18 +140,65 @@ class PointNetBackboneSegLarge(nn.Module):
                     nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        point_features = self.local_mlp(x)  # (B, N, 256)
-        return point_features
+        '''
+        x: [B, N, 3]
+        '''
+        N = x.shape[1]
+        # Local
+        x = self.local_mlp(x)
+        local_feats = x
+        # gloabal max pooling
+        x = torch.max(x, dim=1)[0]
+        x = x.view(-1, 1, x.shape[-1]).repeat(1, N, 1)
+        # concat local feats
+        x = torch.cat([local_feats, x], dim=-1)
+        # Output
+        x = self.output_mlp(x)
+        # Softmax
+        x = torch.softmax(x, dim=-1)
+        return x
+
     
 
 class PointNetSegmentationHead(nn.Module):
-    def __init__(self, backbone, num_classes=4):
+    def __init__(self, backbone,classes=4):
+        mlp_out_dim = 256
         super().__init__()
-        self.backbone = backbone
-        self.seg_head = nn.Linear(256, num_classes)
+        self.local = backbone
+
+        self.output_mlp = nn.Sequential(
+            nn.Linear(mlp_out_dim * 2, 128),
+            nn.GELU(),
+            nn.Linear(128, classes),
+        )
+        self.reset_parameters_()
+
+    def reset_parameters_(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        point_features = self.backbone(x)  # (B, N, 256)
-        logits = self.seg_head(point_features)  # (B, N, num_classes)
-        return logits
+        '''
+        x: [B, N, 3]
+        '''
+        print(x.shape)
+        N = x.shape[1]
+        # Local
+        x = self.local(x)  # (N, 256)
+        local_feats = x
+        # gloabal max pooling
+        x = torch.max(x, dim=1)[0]
+        print(x.shape)
+        x = x.view(-1, 1, x.shape[-1]).repeat(1, N, 1)
+        print(x.shape, local_feats.shape)
+        # concat local feats
+        x = torch.cat([local_feats, x], dim=-1)
+        # Output
+        x = self.output_mlp(x)
+        # Softmax
+        x = torch.softmax(x, dim=-1)
+        return x
 

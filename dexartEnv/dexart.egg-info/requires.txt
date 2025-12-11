@@ -1,5 +1,0 @@
-transforms3d
-gym==0.25.2
-sapien==2.2.1
-numpy
-open3d==0.14.1
