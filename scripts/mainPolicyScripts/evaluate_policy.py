@@ -15,13 +15,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--task_name', type=str, required=True)
     parser.add_argument('--checkpoint_path', type=str, required=True)
-    parser.add_argument('--eval_per_instance', type=int, default=10)
+    parser.add_argument('--eval_per_instance', type=int, default=1)
     parser.add_argument('--seed', type=int, default=100)
     parser.add_argument('--use_test_set', dest='use_test_set', action='store_true', default=False)
+    parser.add_argument('--extractor_name', type=str, required=True)
     args = parser.parse_args()
     task_name = args.task_name
     use_test_set = args.use_test_set
     checkpoint_path = args.checkpoint_path
+    extractor_name = args.extractor_name
     np.random.seed(args.seed)
 
 
@@ -47,7 +49,7 @@ if __name__ == "__main__":
     env.seed(args.seed)
 
     policy = PPO.load(checkpoint_path, env, 'cuda:0',
-                      policy_kwargs=get_3d_policy_kwargs(extractor_name='smallpn'),
+                      policy_kwargs=get_3d_policy_kwargs(extractor_name=extractor_name),
                       check_obs_space=False, force_load=True)
     policy.set_random_seed(args.seed)
 

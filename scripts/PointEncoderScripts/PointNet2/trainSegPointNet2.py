@@ -93,7 +93,7 @@ if __name__ == '__main__':
     run = args.run
     use_img = args.use_img
     point_channel = 3
-    num_epochs = 5
+    num_epochs = 100
     config = {
         'num_epochs': num_epochs,
         'log_step': 10,
@@ -106,13 +106,10 @@ if __name__ == '__main__':
         'cat': cat,
     }
 
-    # assert use_img
+
     train_dataset = SemSegDataset(split='train', point_channel=point_channel, use_img=use_img, root_dir=f'/home/rustam/ProjectMy/artifacts/DataSeg/{cat}')
-    # # val_dataset = SemSegDataset(split='val', point_channel=point_channel, use_img=use_img, root_dir=f'data/{cat}')
-    # # test_dataset = SemSegDataset(split='test', point_channel=point_channel, use_img=use_img, root_dir=f'data/{cat}')
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    # val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
-    # test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
     
     model = PointNet2.PointNet2Lite(4)
     train(model, train_loader, config)
