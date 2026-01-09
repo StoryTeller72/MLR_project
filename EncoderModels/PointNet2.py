@@ -149,3 +149,36 @@ class PointNet2Medium(nn.Module):
         # Сегментационная голова
         out = self.head(l0_up)  # [B, num_classes, 512]
         return out.permute(0, 2, 1)  
+    
+
+class PointNet2LiteClass(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+
+      
+        self.sa1 = SA_Lite(
+            npoint=256,
+            k=16,
+            in_channel=3,
+            mlp=[32, 64]
+        )
+
+       
+        self.classifier = nn.Sequential(
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, xyz):
+        
+        points = None
+
+        l1_xyz, l1_points = self.sa1(xyz, points)  # [B, 64, 256]
+
+        
+        global_feat = torch.max(l1_points, dim=2)[0]  # [B, 64]
+
+        out = self.classifier(global_feat)  # [B, num_classes]
+        return out

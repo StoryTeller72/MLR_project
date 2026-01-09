@@ -6,8 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-
-from torch.utils.data import  DataLoader
 import os
 import numpy as np
 import argparse
@@ -97,7 +95,7 @@ if __name__ == '__main__':
     print('PointNetArchetecture')
     print(backBone)
 
-    print("PointNet with classification head")
+    print("PointNet with segmantation head")
     pointNetSeg = PointNetSegmentationHead(backBone, 4)
     print(pointNetSeg)
 

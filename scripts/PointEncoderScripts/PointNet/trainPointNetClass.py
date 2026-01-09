@@ -8,21 +8,16 @@ import numpy as np
 import argparse
 
 import sys
-sys.path.append(os.path.abspath('../..')) 
-from EncoderModels.PointNet import PointNet, PointNetMedium, PointNetLarge, PointNetClassifier
-from EncoderModels.dataSetClf import PointCloudDatasetClf
-
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+from EncoderModels.PointNet import PointNet, PointNetClassifier
+from scripts.PointEncoderScripts.utils import PointCloudDatasetClf
 
 def train(model, train_loader, test_loader=None, model_name = None, 
           epochs=20, lr=1e-3, device=None, save_freq=None, save_path_base=None):
    
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
-    criterion = nn.CrossEntropyLoss()  
+    criterion = torch.nn.CrossEntropyLoss()  
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     for epoch in range(epochs):
@@ -84,7 +79,7 @@ def train(model, train_loader, test_loader=None, model_name = None,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--extractor_name', type=str, default="smallpn")
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--pretrain_path', type=str, default=None)
     parser.add_argument('--save_freq', type=int, default=1)
     args = parser.parse_args()
@@ -92,12 +87,7 @@ if __name__ == '__main__':
 
     extractor_name = args.extractor_name
     epochs = args.epochs
-    if extractor_name == "smallpn":
-        net = PointNet()
-    elif extractor_name == "mediumpn":
-        net =  PointNetMedium()
-    elif extractor_name == "largepn":
-        net = PointNetLarge()
+    net = PointNet()
     save_freq = args.save_freq
     print('PointNetArchetecture')
     print(net)
@@ -107,7 +97,7 @@ if __name__ == '__main__':
     print(pointNetCls)
 
     print('Dataset Loading')
-    dataSet = PointCloudDatasetClf('../../dexartEnv/assets/data', 4, {"bucket":0, 'faucet':1, "laptop":2, "toilet":3})
+    dataSet = PointCloudDatasetClf('/home/rustam/ProjectMy/artifacts/dataClass', 4, {"bucket":0, 'faucet':1, "laptop":2, "toilet":3})
 
     train_ratio = 0.6
     train_size = int(len(dataSet) * train_ratio)
