@@ -10,12 +10,11 @@ import argparse
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 from EncoderModels.PointNet import PointNet, PointNetClassifier
-from scripts.PointEncoderScripts.utils import PointCloudDatasetClf
+from scripts.PointEncoderScripts.utils import ClsDataset
 
-def train(model, train_loader, test_loader=None, model_name = None, 
-          epochs=20, lr=1e-3, device=None, save_freq=None, save_path_base=None):
+def train(model, device,  train_loader, val_loader=None, model_name = None, 
+          epochs=20, lr=1e-3, save_freq=None, save_path_base=None):
    
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     criterion = torch.nn.CrossEntropyLoss()  
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -29,7 +28,7 @@ def train(model, train_loader, test_loader=None, model_name = None,
         for batch_points, batch_labels in train_loader:
             batch_points = batch_points.to(device)
             batch_labels = batch_labels.to(device)  
-
+            batch_labels = batch_labels - 1
             optimizer.zero_grad()
             outputs = model(batch_points)           
             loss = criterion(outputs, batch_labels)
@@ -46,23 +45,21 @@ def train(model, train_loader, test_loader=None, model_name = None,
 
         print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_acc:.4f}")
 
-        if epoch and (epoch + 1) % save_freq == 0:
-            backbone_path =  save_path_base + f"/{model_name}/class_{epoch}.pth"
-            full_model_path =  save_path_base + f"/{model_name}/full_model_class_{epoch}.pth"
+        if epoch and (epoch + 1) % save_freq == 0  and save_path_base:
+            backbone_path =  save_path_base + f"/class_{epoch}.pth"
             torch.save(model.backbone.state_dict(), backbone_path)
-            torch.save(model.state_dict(), full_model_path)
             print(f"Backbone сохранён в {backbone_path}")
       
-        if test_loader is not None:
+        if val_loader is not None:
             model.eval()
             val_loss = 0.0
             val_correct = 0
             val_total = 0
             with torch.no_grad():
-                for val_points, val_labels in test_loader:
+                for val_points, val_labels in val_loader:
                     val_points = val_points.to(device)
                     val_labels = val_labels.to(device)  
-
+                    val_labels = val_labels - 1
                     outputs = model(val_points)
                     loss = criterion(outputs, val_labels)
 
@@ -71,12 +68,41 @@ def train(model, train_loader, test_loader=None, model_name = None,
                     val_total += val_labels.size(0)
                     val_correct += predicted.eq(val_labels).sum().item()
 
-            val_loss /= len(test_loader.dataset)
+            val_loss /= len(val_loader.dataset)
             val_acc = val_correct / val_total
             print(f"  Validation Loss: {val_loss:.4f} | Validation Acc: {val_acc:.4f}")
-        
+
+def test(model, device, test_loader, model_name):
+    print('Test results')
+    total = 0
+    correct = 0
+    for batch_points, batch_labels in test_loader:
+            batch_points = batch_points.to(device)
+            batch_labels = batch_labels.to(device)
+            batch_labels = batch_labels - 1  
+            outputs = model(batch_points)           
+
+            total += batch_labels.size(0)
+            _, predicted = outputs.max(1)
+            correct += predicted.eq(batch_labels).sum().item()
+
+       
+    accuracy = correct / total
+
+    print(f"Test Acc: {accuracy:.4f}")
+
+
 
 if __name__ == '__main__':
+    THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, '..', '..', '..'))
+    DATA_ROOT = os.path.join(PROJECT_ROOT, 'artifacts', 'dataCls')
+    TRAIN_PATH = os.path.join(DATA_ROOT, 'train.npz')
+    VAL_PATH   = os.path.join(DATA_ROOT, 'val.npz')
+    TEST_PATH  = os.path.join(DATA_ROOT, 'test.npz')
+
+    MODEL_SAVE_PATH = os.path.join(PROJECT_ROOT, 'artifacts/Encoders/pnClass')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--extractor_name', type=str, default="smallpn")
     parser.add_argument('--epochs', type=int, default=100)
@@ -89,27 +115,26 @@ if __name__ == '__main__':
     epochs = args.epochs
     net = PointNet()
     save_freq = args.save_freq
-    print('PointNetArchetecture')
-    print(net)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("PointNet with classification head")
     pointNetCls = PointNetClassifier(net, 4)
     print(pointNetCls)
 
+
+
+
     print('Dataset Loading')
-    dataSet = PointCloudDatasetClf('/home/rustam/ProjectMy/artifacts/dataClass', 4, {"bucket":0, 'faucet':1, "laptop":2, "toilet":3})
+    dataset_train = ClsDataset(TRAIN_PATH)
+    dataset_val = ClsDataset(VAL_PATH)
+    dataset_test = ClsDataset(TEST_PATH)
+    batch_size = 512
+    loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+    loader_val = DataLoader(dataset_val)
+    loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
 
-    train_ratio = 0.6
-    train_size = int(len(dataSet) * train_ratio)
-    test_size = len(dataSet) - train_size
+    print(f"DEVICE: {device},Train size:{len(dataset_train)}, Validation size: {len(dataset_val)}, Test size: {len(dataset_test)}")
 
-    train_dataset, test_dataset = random_split(dataSet, [train_size, test_size])
-    batch_size = 16
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+    train( pointNetCls , device, loader_train, loader_val, 'PN_class', 10, save_freq=5, save_path_base=MODEL_SAVE_PATH)
 
-    print(f"Train size:{train_size}, Test size: {test_size}")
-
-    save_path = f"../../artifacts/Encoders"
-
-    train(model=pointNetCls, train_loader=train_loader, test_loader=test_loader, model_name=extractor_name, epochs=epochs, save_path_base=save_path, save_freq=save_freq)
+    test( pointNetCls,device,  loader_test, 'PnClass')
