@@ -4,6 +4,10 @@ import numpy as np
 from os.path import join as pjoin
 import torch
 
+import os
+import glob
+import numpy as np
+
 
 # train set: data/faucet_img/train.npy
 class SemSegDataset(Dataset):
@@ -36,5 +40,24 @@ class SemSegDataset(Dataset):
             points = sample[0:512, 0:self.point_channel] 
             labels = np.argmax(sample[0:512, 3:], axis=1)
         return torch.tensor(points), torch.tensor(labels)
+    
+class ClsDataset(Dataset):
+    def __init__(self, npz_path):
+        data = np.load(npz_path)
+        self.points = data['points'].astype(np.float32)  # [B, N, 3]
+        self.labels = data['labels'].astype(np.int64)    # [B]
+
+    def __len__(self):
+        return len(self.points)
+
+    def __getitem__(self, idx):
+        points = self.points[idx]   # [N, 3]
+        label = self.labels[idx]    # int
+
+        points = torch.from_numpy(points)      # [N, 3]
+        label = torch.tensor(label).long()     # []
+
+        return points, label
+
 
 

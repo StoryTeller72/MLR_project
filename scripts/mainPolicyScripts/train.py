@@ -7,10 +7,10 @@ import torch.nn as nn
 import argparse
 from dexart.env.create_env import create_env
 from dexart.env.task_setting import TRAIN_CONFIG, IMG_CONFIG, RANDOM_CONFIG
-from stable_baselines3.common.torch_layers import PointNetImaginationExtractorGP
-from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
-from stable_baselines3.ppo import PPO
-from stable_baselines3.simple_callback import SimpleCallback
+from models.common.torch_layers import PointNetImaginationExtractorGP
+from models.common.vec_env.subproc_vec_env import SubprocVecEnv
+from models.ppo import PPO
+from models.simple_callback import SimpleCallback
 import torch
 
 # BASE_DIR = os.path.dirname(os.path.abspath(__file__))

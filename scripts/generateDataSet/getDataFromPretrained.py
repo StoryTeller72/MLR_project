@@ -12,7 +12,7 @@ import argparse
 from dexart.env.task_setting import TRAIN_CONFIG, RANDOM_CONFIG
 import numpy as np
 from dexart.env.create_env import create_env
-from stable_baselines3 import PPO
+from models import PPO
 from examples.train import get_3d_policy_kwargs
 from tqdm import tqdm
 

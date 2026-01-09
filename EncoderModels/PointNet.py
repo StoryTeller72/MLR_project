@@ -128,35 +128,6 @@ class PointNetClassifier(nn.Module):
         return out
 
 
-class PointNet(nn.Module): # actually pointnet
-    
-
-
-    def reset_parameters_(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.trunc_normal_(m.weight, std=.02)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-    def forward(self, x):
-        '''
-        x: [B, N, 3]
-        '''
-        N = x.shape[1]
-        # Local
-        x = self.local_mlp(x)
-        local_feats = x
-        # gloabal max pooling
-        x = torch.max(x, dim=1)[0]
-        x = x.view(-1, 1, x.shape[-1]).repeat(1, N, 1)
-        # concat local feats
-        x = torch.cat([local_feats, x], dim=-1)
-        # Output
-        x = self.output_mlp(x)
-        # Softmax
-        x = torch.softmax(x, dim=-1)
-        return x
 
     
 

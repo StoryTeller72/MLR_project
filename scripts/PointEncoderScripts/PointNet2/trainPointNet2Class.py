@@ -13,11 +13,6 @@ import sys
 sys.path.append(os.path.abspath('')) 
 from scripts.PointEncoderScripts.utils import SemSegDataset
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-
 import argparse
 
 
@@ -111,7 +106,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
     
-    model = PointNet2.PointNet2Lite(4)
+    model = PointNet2.PointNet2LiteClass(4)
     train(model, train_loader, config)
     save(model,num_epochs, config)
 
