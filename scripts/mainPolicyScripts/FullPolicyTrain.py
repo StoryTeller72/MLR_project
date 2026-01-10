@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrain_path', type=str, default='/home/rustam/ProjectMy/artifacts/Encoders/pnClass/class_9.pth')
     parser.add_argument('--save_freq', type=int, default=10)
     # parser.add_argument('--save_path', type=str, default=BASE_DIR)
-    parser.add_argument('--save_path', type=str, default='/home/rustam/ProjectMy/artifacts/fullModel/PointNetClass')
+    parser.add_argument('--save_path', type=str, default='../../artifacts/fullModel/PointNetClass')
     args = parser.parse_args()
 
     task_name = args.task_name
