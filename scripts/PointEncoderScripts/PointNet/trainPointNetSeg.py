@@ -1,119 +1,189 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+from EncoderModels.PointNet import PointNetSegBackbone, PointNetSeg
 import torch
-from torch.utils.data import random_split
-import torch.optim as optim
-
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
 import os
 import numpy as np
 import argparse
-
-
 import sys
-sys.path.append(os.path.abspath('../..')) 
-from EncoderModels.PointNet  import PointNet, PointNetMedium, PointNetLarge, PointNetSegmentationHead
-from scripts.PointEncoderScripts.DataSetSeg import PointCloudDatasetSetSeg
+sys.path.append(os.path.abspath('')) 
+from scripts.PointEncoderScripts.utils import SemSegDataset
+import json
 
-def train_segmentation(model, train_loader, test_loader=None, epochs=10, lr=1e-4, save_freq=None, save_path_base=None,  model_name = None, device=None):
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    criterion = nn.CrossEntropyLoss()  # метки по точкам: (B, N)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    for epoch in range(epochs):
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = BASE_DIR
+sys.path.append(os.path.join(ROOT_DIR, 'models'))
+
+def confusion_matrix(preds, labels, num_classes):
+    cm = torch.zeros((num_classes, num_classes), dtype=torch.long)
+    for t, p in zip(labels, preds):
+        cm[t, p] += 1
+    return cm
+
+
+def compute_metrics(cm):
+    num_classes = cm.shape[0]
+
+    iou_per_class = []
+    acc_per_class = []
+
+    for c in range(num_classes):
+        TP = cm[c, c]
+        FP = cm[:, c].sum() - TP
+        FN = cm[c, :].sum() - TP
+
+        denom = TP + FP + FN
+        iou = TP.float() / denom.float() if denom > 0 else torch.tensor(0.)
+        acc = TP.float() / (TP + FN).float() if (TP + FN) > 0 else torch.tensor(0.)
+
+        iou_per_class.append(iou)
+        acc_per_class.append(acc)
+
+    mIoU = torch.mean(torch.stack(iou_per_class))
+    mAcc = torch.mean(torch.stack(acc_per_class))
+    OA = torch.trace(cm).float() / cm.sum().float()
+
+    return {
+        "IoU": iou_per_class,
+        "Acc": acc_per_class,
+        "mIoU": mIoU.item(),
+        "mAcc": mAcc.item(),
+        "OA": OA.item()
+    }
+
+def save_logs_json(logs, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(logs, f, indent=4)
+
+def train(model, train_loader, config):
+    logs = []
+
+    optimizer = optim.Adam(model.parameters(), lr=config['lr'])
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+
+    num_classes = 4  
+
+    if config['cat'] == 'bucket':
+        print('Using Weighted CrossEntropy loss')
+        criterion = nn.CrossEntropyLoss(
+            weight=torch.tensor([3., 1., 1., 1.]).to(device)
+        )
+    else:
+        print('Using CrossEntropy loss')
+        criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(config['num_epochs']):
         model.train()
-        total_loss = 0
-        correct = 0
-        total_points = 0
 
-        for points, labels in train_loader:
-            points = points.to(device)
-            labels = labels.to(device)  # (B, N)
+        # confusion matrix за эпоху
+        epoch_cm = torch.zeros((num_classes, num_classes), dtype=torch.long)
+
+        for i, (points, labels) in enumerate(train_loader):
+            points = points.float().to(device)    # [B, N, 3]
+            labels = labels.long().to(device)     # [B, N]
 
             optimizer.zero_grad()
-            outputs = model(points)     # (B, N, num_classes)
-            loss = criterion(outputs.transpose(1, 2), labels)
+
+            outputs = model(points)               # [B, N, 4]
+            outputs = outputs.permute(0, 2, 1)    # [B, 4, N]
+
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item() * points.size(0)
-            _, preds = outputs.max(2)
-            correct += (preds == labels).sum().item()
-            total_points += labels.numel()
-        if epoch and (epoch + 1) % save_freq == 0:
-            backbone_path =  save_path_base + f"/{model_name}/seg_{epoch}.pth"
-            full_model_path =  save_path_base + f"/{model_name}/full_model_seg_{epoch}.pth"
-            torch.save(model.backbone.state_dict(), backbone_path)
-            torch.save(model.state_dict(), full_model_path)
-            print(f"Backbone сохранён в {backbone_path}")
+            preds = outputs.argmax(dim=1)         # [B, N]
 
-        train_loss = total_loss / len(train_loader.dataset)
-        train_acc = correct / total_points
-        print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
+            epoch_cm += confusion_matrix(
+                preds.view(-1).cpu(),
+                labels.view(-1).cpu(),
+                num_classes
+            )
 
-        if test_loader is not None:
-            model.eval()
-            val_loss = 0
-            val_correct = 0
-            val_total = 0
-            with torch.no_grad():
-                for points, labels in test_loader:
-                    points = points.to(device)
-                    labels = labels.to(device)
-                    outputs = model(points)
-                    loss = criterion(outputs.transpose(1, 2), labels)
-                    val_loss += loss.item() * points.size(0)
-                    _, preds = outputs.max(2)
-                    val_correct += (preds == labels).sum().item()
-                    val_total += labels.numel()
+            if i % config['log_step'] == 0:
+                print(
+                    f"Epoch [{epoch + 1}/{config['num_epochs']}], "
+                    f"Step [{i + 1}/{len(train_loader)}], "
+                    f"Loss: {loss.item():.4f}"
+                )
+        if epoch % config['save_step'] ==0 :
+            save(model,num_epochs, config)
 
-            val_loss /= len(test_loader.dataset)
-            val_acc = val_correct / val_total
-            print(f"  Validation Loss: {val_loss:.4f} | Validation Acc: {val_acc:.4f}")
+        metrics = compute_metrics(epoch_cm)
+
+        logs.append({
+            'epoch': epoch + 1,
+            'loss': loss.item(),
+            'OA': metrics['OA'],
+            'mAcc': metrics['mAcc'],
+            'mIoU': metrics['mIoU']
+        })
+
+        print(f"\nEpoch {epoch + 1} summary:")
+        print(f"  OA   : {metrics['OA']:.4f}")
+        print(f"  mAcc : {metrics['mAcc']:.4f}")
+        print(f"  mIoU : {metrics['mIoU']:.4f}")
+
+        print("  IoU per class:")
+        for c, iou in enumerate(metrics['IoU']):
+            print(f"    Class {c}: {iou:.4f}")
+
+        print("-" * 40)
+        save_logs_json(logs, '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/logs.json')
+    return logs
+
+               
 
         
+
+def save(model, epoch, config):
+    print( f"{config['log_dir']}/{epoch}.pth")
+    torch.save(model.backbone, f"{config['log_dir']}/{epoch}.pth")
+
+
+
+
+
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--extractor_name', type=str, default="smallpn")
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--pretrain_path', type=str, default=None)
-    parser.add_argument('--save_freq', type=int, default=1)
+    parser.add_argument('--arch', type=str, default='pn', help='model architecture')
+    parser.add_argument('--cat', type=str, default='bucket', help='category to train')
+    parser.add_argument('--run', type=str, default='0', help='run id')
+    parser.add_argument('--use_img', action='store_true', help='use image', default=False)
     args = parser.parse_args()
 
 
-    extractor_name = args.extractor_name
-    epochs = args.epochs
-    if extractor_name == "smallpn":
-        backBone = PointNet()
-    elif extractor_name == "mediumpn":
-        backBone =  PointNetMedium()
-    elif extractor_name == "largepn":
-        backBone = PointNetLarge()
-    save_freq = args.save_freq
-    print('PointNetArchetecture')
-    print(backBone)
+    arch = args.arch
+    cat = args.cat
+    run = args.run
+    use_img = args.use_img
+    point_channel = 3
+    num_epochs = 20
+    config = {
+        'num_epochs': num_epochs,
+        'log_step': 10,
+        'val_step': 1,
+        'log_dir': '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg',
+        'arch': arch,
+        'lr': 1e-3,
+        'classes': 4,
+        'save_step': 5,
+        'cat': cat,
+    }
 
-    print("PointNet with segmantation head")
-    pointNetSeg = PointNetSegmentationHead(backBone, 4)
-    print(pointNetSeg)
 
-    print('Dataset Loading')
-    dataSet = PointCloudDatasetSetSeg('../../dexartEnv/assets/data')
+    train_dataset = SemSegDataset(split='train', point_channel=point_channel, use_img=use_img, root_dir=f'/home/rustam/ProjectMy/artifacts/DataSeg/{cat}')
+    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
 
-    train_ratio = 0.7
-    train_size = int(len(dataSet) * train_ratio)
-    test_size = len(dataSet) - train_size
+    backbone = PointNetSegBackbone()
+    model = PointNetSeg(backbone, num_classes=4)
+    logs = train(model, train_loader, config)
+    save_logs_json(logs, '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/logs.json')
 
-    train_dataset, test_dataset = random_split(dataSet, [train_size, test_size])
-    batch_size = 16
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-
-    print(f"Train size:{train_size}, Test size: {test_size}")
-
-    save_path = f"../../artifacts/Encoders"
-
-    train_segmentation(pointNetSeg, train_loader, test_loader, model_name=extractor_name, epochs=epochs, save_path_base=save_path, save_freq=save_freq)
 
