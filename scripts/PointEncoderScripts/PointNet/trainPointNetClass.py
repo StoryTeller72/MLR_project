@@ -18,7 +18,7 @@ def train(model, device,  train_loader, val_loader=None, model_name = None,
     model = model.to(device)
     criterion = torch.nn.CrossEntropyLoss()  
     optimizer = optim.Adam(model.parameters(), lr=lr)
-
+    acc_logs = []
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
@@ -42,7 +42,7 @@ def train(model, device,  train_loader, val_loader=None, model_name = None,
 
         epoch_loss = running_loss / len(train_loader.dataset)
         epoch_acc = correct / total
-
+        acc_logs.append(epoch_acc)
         print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_acc:.4f}")
 
         if epoch and (epoch + 1) % save_freq == 0  and save_path_base:
@@ -71,7 +71,7 @@ def train(model, device,  train_loader, val_loader=None, model_name = None,
             val_loss /= len(val_loader.dataset)
             val_acc = val_correct / val_total
             print(f"  Validation Loss: {val_loss:.4f} | Validation Acc: {val_acc:.4f}")
-
+    return acc_logs
 def test(model, device, test_loader, model_name):
     print('Test results')
     total = 0
@@ -100,9 +100,8 @@ if __name__ == '__main__':
     TRAIN_PATH = os.path.join(DATA_ROOT, 'train.npz')
     VAL_PATH   = os.path.join(DATA_ROOT, 'val.npz')
     TEST_PATH  = os.path.join(DATA_ROOT, 'test.npz')
-
     MODEL_SAVE_PATH = os.path.join(PROJECT_ROOT, 'artifacts/Encoders/pnClass')
-
+    LOGS_SAVE_PATH = os.path.join(MODEL_SAVE_PATH, 'logs.txt')
     parser = argparse.ArgumentParser()
     parser.add_argument('--extractor_name', type=str, default="smallpn")
     parser.add_argument('--epochs', type=int, default=100)
@@ -135,6 +134,7 @@ if __name__ == '__main__':
 
     print(f"DEVICE: {device},Train size:{len(dataset_train)}, Validation size: {len(dataset_val)}, Test size: {len(dataset_test)}")
 
-    train( pointNetCls , device, loader_train, loader_val, 'PN_class', 10, save_freq=5, save_path_base=MODEL_SAVE_PATH)
-
+    logs = train( pointNetCls , device, loader_train, loader_val, 'PN_class', 5, save_freq=5, save_path_base=MODEL_SAVE_PATH)
+    with open(LOGS_SAVE_PATH, 'w') as file:
+        file.write('\n'.join(map(str, logs)))
     test( pointNetCls,device,  loader_test, 'PnClass')
