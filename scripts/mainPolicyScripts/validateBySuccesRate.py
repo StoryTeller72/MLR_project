@@ -12,12 +12,6 @@ from examples.train import get_3d_policy_kwargs
 from tqdm import tqdm
 
 def validate_this_epoch(args_d):
-    #  args_d = {'task_name': task_name,
-    #     'use_test_set': use_test_set,
-    #     "checkpoint_path": path, 
-    #     'extractor_name': extractor_name,
-    #     'eval_per_instance': eval_per_instance}
-
     task_name= args_d['task_name']
     use_test_set = args_d['use_test_set']
     checkpoint_path = args_d['checkpoint_path']
@@ -128,8 +122,8 @@ if __name__ == "__main__":
         reward_history.append(reward)
         
 
-with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNet2SegmentBucket/res/reward.txt", "w") as f:
+with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetClass/res/reward.txt", "w") as f:
     f.write("\n".join(map(str, reward_history)))
 
-with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNet2SegmentBucket/res/sr.txt", "w") as f:
+with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetClass/res/sr.txt", "w") as f:
     f.write("\n".join(map(str, sucess_rate_history)))
