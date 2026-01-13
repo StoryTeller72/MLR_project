@@ -1,113 +1,159 @@
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
-from EncoderModels import PointNet2
+from EncoderModels.PointNet2 import PointNet2LiteBacbone, PointNet2LiteClassHead 
 import torch
-from torch.utils.data import random_split
 import torch.optim as optim
 
 from torch.utils.data import  DataLoader
 import os
 import numpy as np
-import argparse
-import sys
 sys.path.append(os.path.abspath('')) 
-from scripts.PointEncoderScripts.utils import SemSegDataset
 
 import argparse
 
+from scripts.PointEncoderScripts.utils import ClsDataset
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.utils import make_grid
-import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
 
-def train(model, train_loader,config):
-    optimizer = optim.Adam(model.parameters(), lr=config['lr'])
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.to(device)
-    if config['cat'] == 'bucket':
-        print('Using Weighted CrossEntropy loss')
-        criterion = nn.CrossEntropyLoss(weight=torch.tensor([3., 1., 1., 1.]).to(device))
-    else:
-        print('Using CrossEntropy loss')
-        criterion = nn.CrossEntropyLoss()
-    for epoch in range(config['num_epochs']):
-        tic = time.time()
-        model.train()
-        for i, (points, labels) in enumerate(train_loader):
-            points = points.float().to(device)
-            labels = labels.long().to(device)
-            optimizer.zero_grad()
+def train(model, device,  train_loader, val_loader=None, model_name = None, 
+          epochs=20, lr=1e-3, save_freq=None, save_path_base=None):
+    logsAccuracy = []
+    model = model.to(device)
+    criterion = torch.nn.CrossEntropyLoss()  
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-            
-            outputs = model(points)
-            # outputs: [B, N, 4], labels: [B, N]
-            outputs = outputs.permute(0, 2, 1)
-            loss = criterion(outputs, labels)
-            
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+
+        for batch_points, batch_labels in train_loader:
+            batch_points = batch_points.to(device)
+            batch_labels = batch_labels.to(device)  
+            batch_labels = batch_labels - 1
+            optimizer.zero_grad()
+            outputs = model(batch_points)           
+            loss = criterion(outputs, batch_labels)
             loss.backward()
             optimizer.step()
 
-            if i % config['log_step'] == 0:
-                print(f"Epoch [{epoch + 1}/{config['num_epochs']}], Step [{i + 1}/{len(train_loader)}], Loss: {loss.item():.4f}")
-               
+            running_loss += loss.item() * batch_points.size(0)
+            _, predicted = outputs.max(1)
+            total += batch_labels.size(0)
+            correct += predicted.eq(batch_labels).sum().item()
 
-   
+            batch_points = batch_points.to('cpu')
+            batch_labels = batch_labels.to('cpu')  
 
-def save(model, epoch, config):
-    print( f"{config['log_dir']}/{epoch}.pth")
-    torch.save(model.sa1.state_dict(), f"{config['log_dir']}/{epoch}.pth")
+        epoch_loss = running_loss / len(train_loader.dataset)
+        epoch_acc = correct / total
+        logsAccuracy.append(epoch_acc)
 
+        print(f"[Epoch {epoch+1}/{epochs}] Train Loss: {epoch_loss:.4f} | Train Acc: {epoch_acc:.4f}")
 
+        if epoch and (epoch + 1) % save_freq == 0  and save_path_base:
+            backbone_path =  save_path_base + f"/class_{epoch}.pth"
+            torch.save(model.backbone.state_dict(), backbone_path)
+            print(f"Backbone сохранён в {backbone_path}")
+      
+        if val_loader is not None:
+            model.eval()
+            val_loss = 0.0
+            val_correct = 0
+            val_total = 0
+            i = 0
+            with torch.no_grad():
+                for val_points, val_labels in val_loader:
+                    val_points = val_points.to(device)
+                    val_labels = val_labels.to(device)  
+                    val_labels = val_labels - 1
+                    outputs = model(val_points)
+                    loss = criterion(outputs, val_labels)
+
+                    val_loss += loss.item() * val_points.size(0)
+                    _, predicted = outputs.max(1)
+                    val_total += val_labels.size(0)
+                    val_correct += predicted.eq(val_labels).sum().item()
+                    val_points = val_points.to('cpu')
+                    val_labels = val_labels.to('cpu')  
+
+            val_loss /= len(val_loader.dataset)
+            val_acc = val_correct / val_total
+            print(f"  Validation Loss: {val_loss:.4f} | Validation Acc: {val_acc:.4f}")
+    return logsAccuracy
+
+def test(model, device, test_loader, model_name):
+    print('Test results')
+    total = 0
+    correct = 0
+    for batch_points, batch_labels in test_loader:
+            batch_points = batch_points.to(device)
+            batch_labels = batch_labels.to(device)
+            batch_labels = batch_labels - 1  
+            outputs = model(batch_points)           
+
+            total += batch_labels.size(0)
+            _, predicted = outputs.max(1)
+            correct += predicted.eq(batch_labels).sum().item()
+
+       
+    accuracy = correct / total
+
+    print(f"Test Acc: {accuracy:.4f}")
 
 
 
 if __name__ == '__main__':
+    THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, '..', '..', '..'))
+    DATA_ROOT = os.path.join(PROJECT_ROOT, 'artifacts', 'dataCls')
+    TRAIN_PATH = os.path.join(DATA_ROOT, 'train.npz')
+    VAL_PATH   = os.path.join(DATA_ROOT, 'val.npz')
+    TEST_PATH  = os.path.join(DATA_ROOT, 'test.npz')
+
+    MODEL_SAVE_PATH = os.path.join(PROJECT_ROOT, 'artifacts/Encoders/PointNet2class')
+    LOGS_SAVE_PATH = os.path.join(MODEL_SAVE_PATH, 'res.txt')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--arch', type=str, default='pn2', help='model architecture')
-    parser.add_argument('--cat', type=str, default='bucket', help='category to train')
-    parser.add_argument('--run', type=str, default='0', help='run id')
-    parser.add_argument('--use_img', action='store_true', help='use image', default=False)
-    parser.add_argument('--eval', type=str, default=None, help='eval model name e.g. pn_100.pth')
+    parser.add_argument('--extractor_name', type=str, default="pn2")
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--pretrain_path', type=str, default=None)
+    parser.add_argument('--save_freq', type=int, default=1)
     args = parser.parse_args()
 
 
-    arch = args.arch
-    cat = args.cat
-    run = args.run
-    use_img = args.use_img
-    point_channel = 3
-    num_epochs = 100
-    config = {
-        'num_epochs': num_epochs,
-        'log_step': 10,
-        'val_step': 1,
-        'log_dir': '/home/rustam/ProjectMy/artifacts/PointNet2',
-        'arch': arch,
-        'lr': 1e-3,
-        'classes': 4,
-        'save_step': 20,
-        'cat': cat,
-    }
+    extractor_name = args.extractor_name
+    epochs = args.epochs
+    bacbone = PointNet2LiteBacbone(4)
+    model = PointNet2LiteClassHead(4, bacbone)
+    save_freq = args.save_freq
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    print("PointNet with classification head")
+    print(model)
 
 
-    train_dataset = SemSegDataset(split='train', point_channel=point_channel, use_img=use_img, root_dir=f'/home/rustam/ProjectMy/artifacts/DataSeg/{cat}')
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-    
-    model = PointNet2.PointNet2LiteClass(4)
-    train(model, train_loader, config)
-    save(model,num_epochs, config)
 
 
+    print('Dataset Loading')
+    dataset_train = ClsDataset(TRAIN_PATH)
+    dataset_val = ClsDataset(VAL_PATH)
+    dataset_test = ClsDataset(TEST_PATH)
+    batch_size = 512
+    loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+    loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True)
+    loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=True)
+
+    print(f"DEVICE: {device},Train size:{len(dataset_train)}, Validation size: {len(dataset_val)}, Test size: {len(dataset_test)}")
+
+    logs = train( model , device, loader_train, loader_val, 'PN2_class', 5, save_freq=5, save_path_base=MODEL_SAVE_PATH)
+
+    with open(LOGS_SAVE_PATH, 'w') as file:
+        file.write('\n'.join(map(str, logs)))
+    test(model, device,  loader_test, 'PnC2lass')
+    model.to('cpu')

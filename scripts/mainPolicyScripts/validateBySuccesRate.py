@@ -122,8 +122,8 @@ if __name__ == "__main__":
         reward_history.append(reward)
         
 
-with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetClass/res/reward.txt", "w") as f:
+with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetFreezeSeg/res/reward.txt", "w") as f:
     f.write("\n".join(map(str, reward_history)))
 
-with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetClass/res/sr.txt", "w") as f:
+with open("/home/rustam/ProjectMy/artifacts/fullModel/PointNetFreezeSeg/res/sr.txt", "w") as f:
     f.write("\n".join(map(str, sucess_rate_history)))

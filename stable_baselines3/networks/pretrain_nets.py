@@ -191,22 +191,3 @@ class PointNet2Lite(nn.Module):
         out_put = torch.max(out_put, dim=1)[0]
         return out_put
 
-
-
-class PointNet2Medium(nn.Module):
-    def __init__(self, num_classes):
-        super().__init__()
-        # SA слои
-        self.sa1 = SA_Lite(npoint=256, k=16, in_channel=3, mlp=[32, 64])
-        self.sa2 = SA_Lite(npoint=128, k=16, in_channel=64+3, mlp=[64, 128])
-
-       
-
-    def forward(self, xyz):
-        points = None
-
-        # SA слои
-        l1_xyz, l1_points = self.sa1(xyz, points)          # [B, 256, 3], [B, 64, 256]
-        l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)   # [B, 128, 3], [B, 128, 128]
-
-        # Надо дописать.

@@ -99,9 +99,9 @@ if __name__ == '__main__':
     tasks = ['faucet', 'bucket', 'laptop', 'toilet']
     for task_name in tasks:
         for index in TRAIN_CONFIG[task_name]['seen']:
-            gen_single_data(task_name, index, mapping[task_name], 'train', n_fold=16, save_path=save_path)
+            gen_single_data(task_name, index, mapping[task_name], 'train', n_fold=2, save_path=save_path)
         for index in TRAIN_CONFIG[task_name]['seen']:
-            gen_single_data(task_name, index, mapping[task_name], 'val', n_fold=2, save_path=save_path)
+            gen_single_data(task_name, index, mapping[task_name], 'val', n_fold=1, save_path=save_path)
         for index in TRAIN_CONFIG[task_name]['unseen']:
-            gen_single_data(task_name, index, mapping[task_name], 'test', n_fold=2, save_path=save_path)
+            gen_single_data(task_name, index, mapping[task_name], 'test', n_fold=1, save_path=save_path)
     merge_data(save_path=save_path)

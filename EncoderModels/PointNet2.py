@@ -89,79 +89,24 @@ class FP_Lite(nn.Module):
         return self.mlp(new_points)
 
 
-class PointNet2Lite(nn.Module):
+class PointNet2LiteBacbone(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
         self.sa1 = SA_Lite(npoint=256, k=16, in_channel=3, mlp=[32, 64])
-
-       
-        self.fp1 = FP_Lite(in_channel=64+3, mlp=[64, 64])
-
-       
-        self.head = nn.Sequential(
-            nn.Conv1d(64, 64, 1),
-            nn.ReLU(),
-            nn.Conv1d(64, num_classes, 1)
-        )
 
     def forward(self, xyz):
         points = None
         l1_xyz, l1_points = self.sa1(xyz, points)  # [B, 256, 3], [B, 64, 256]
-
-       
-        l0_up = self.fp1(xyz, l1_xyz, xyz.permute(0,2,1), l1_points)  # [B, 64, N]
-
-       
-        out = self.head(l0_up)  # [B, num_classes, N]
-        return out.permute(0, 2, 1)  # [B, N, num_classes]
+        return l1_xyz, l1_points
 
 
-
-class PointNet2Medium(nn.Module):
-    def __init__(self, num_classes):
-        super().__init__()
-        # SA слои
-        self.sa1 = SA_Lite(npoint=256, k=16, in_channel=3, mlp=[32, 64])
-        self.sa2 = SA_Lite(npoint=128, k=16, in_channel=64+3, mlp=[64, 128])
-
-        # FP слои
-        self.fp2 = FP_Lite(in_channel=128+64, mlp=[128, 64])
-        self.fp1 = FP_Lite(in_channel=64+3, mlp=[64, 64])
-
-        # Сегментационная голова
-        self.head = nn.Sequential(
-            nn.Conv1d(64, 64, 1),
-            nn.ReLU(),
-            nn.Conv1d(64, num_classes, 1)
-        )
-
-    def forward(self, xyz):
-        points = None
-
-        # SA слои
-        l1_xyz, l1_points = self.sa1(xyz, points)          # [B, 256, 3], [B, 64, 256]
-        l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)   # [B, 128, 3], [B, 128, 128]
-
-        # FP слои (upsample)
-        l1_up = self.fp2(l1_xyz, l2_xyz, l1_points, l2_points)       # [B, 64, 256]
-        l0_up = self.fp1(xyz, l1_xyz, xyz.permute(0, 2, 1), l1_up)   # [B, 64, 512]
-
-        # Сегментационная голова
-        out = self.head(l0_up)  # [B, num_classes, 512]
-        return out.permute(0, 2, 1)  
     
 
-class PointNet2LiteClass(nn.Module):
-    def __init__(self, num_classes):
+class PointNet2LiteClassHead(nn.Module):
+    def __init__(self, num_classes, backbone):
         super().__init__()
 
-      
-        self.sa1 = SA_Lite(
-            npoint=256,
-            k=16,
-            in_channel=3,
-            mlp=[32, 64]
-        )
+        self.backbone = backbone
 
        
         self.classifier = nn.Sequential(
@@ -172,13 +117,36 @@ class PointNet2LiteClass(nn.Module):
         )
 
     def forward(self, xyz):
-        
-        points = None
 
-        l1_xyz, l1_points = self.sa1(xyz, points)  # [B, 64, 256]
+        l1_xyz, l1_points = self.backbone(xyz)  # [B, 64, 256]
 
         
         global_feat = torch.max(l1_points, dim=2)[0]  # [B, 64]
 
         out = self.classifier(global_feat)  # [B, num_classes]
         return out
+
+class PointNet2LiteSegmentation(nn.Module):
+    def __init__(self, backbone, num_classes):
+        super().__init__()
+        self.backbone = backbone
+
+       
+        self.fp1 = FP_Lite(in_channel=64+3, mlp=[64, 64])
+
+       
+        self.head = nn.Sequential(
+            nn.Conv1d(64, 64, 1),
+            nn.ReLU(),
+            nn.Conv1d(64, num_classes, 1)
+        )
+
+    def forward(self, xyz):
+        l1_xyz, l1_points = self.backbone(xyz)  # [B, 256, 3], [B, 64, 256]
+
+       
+        l0_up = self.fp1(xyz, l1_xyz, xyz.permute(0,2,1), l1_points)  # [B, 64, N]
+
+       
+        out = self.head(l0_up)  # [B, num_classes, N]
+        return out.permute(0, 2, 1)  # [B, N, num_classes]

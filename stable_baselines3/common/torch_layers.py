@@ -379,6 +379,7 @@ class PointNetImaginationExtractorGP(BaseFeaturesExtractor):
 
             self.n_output_channels = out_channel + output_dim
             self._features_dim = self.n_output_channels
+            print(f'MLP output dim {output_dim}')
             self.state_mlp = nn.Sequential(*create_mlp(self.state_dim, output_dim, net_arch, state_mlp_activation_fn))
 
     def forward(self, observations: TensorDict) -> th.Tensor:
@@ -397,6 +398,8 @@ class PointNetImaginationExtractorGP(BaseFeaturesExtractor):
         # points: B * 3 * (N + sum(Ni))
         pn_feat = self.extractor(points)    # B * 256
         if self.use_state:
+            print('MLP for states')
+            print(self.state_mlp)
             state_feat = self.state_mlp(observations[self.state_key])
             return torch.cat([pn_feat, state_feat], dim=-1)
         else:

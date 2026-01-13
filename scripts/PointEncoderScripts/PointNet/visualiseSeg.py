@@ -1,9 +1,24 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 import numpy as np
 from dexart.env.task_setting import ROBUSTNESS_INIT_CAMERA_CONFIG
 import open3d as o3d
 from examples.utils import get_viewpoint_camera_parameter, visualize_observation
-
+from scripts.PointEncoderScripts.utils import SemSegDataset
 import random
+
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
+
+import numpy as np
+import torch
+import numpy as np
+import open3d as o3d
+import matplotlib.pyplot as plt
+from scripts.PointEncoderScripts.utils import SemSegDataset
 
 import torch
 from torch.utils.data import random_split
@@ -14,10 +29,7 @@ import os
 import numpy as np
 import argparse
 
-import sys
-sys.path.append(os.path.abspath('../..')) 
-from EncoderModels.PointNet import PointNet, PointNetMedium, PointNetLarge, PointNetClassifier
-from EncoderModels.PointNet import  PointNetSegmentationHead
+from EncoderModels.PointNet import   PointNetSegBackbone, PointNetSeg
 def visualize_segmented_pc(labels, points, use_seg=False, img_type=None):
     def visualize_pc_with_seg_label(cloud):
         pc = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(cloud[:, :3]))
@@ -58,39 +70,43 @@ if __name__ == '__main__':
     extractor_name = args.extractor_name
     pretrain_path = args.pretrain_path
     task =  args.task
-    if extractor_name == "smallpn":
-        net = PointNet()
-    elif extractor_name == "mediumpn":
-        net =  PointNetMedium()
-    elif extractor_name == "largepn":
-        net = PointNetLarge()
+  
 
   
     print('PointNetArchetecture')
-    print(net)
+    cat = 'bucket'
 
-    print("PointNet with classification head")
-    pointNetCls = PointNetClassifier(net, 4)
-    if pretrain_path:
-        pointNetCls.load_state_dict(torch.load(pretrain_path))
 
-    print(pointNetCls)
-    index = random.randint(0, 2_000)
-    row_pc = np.load(f'../../dexartEnv/assets/data/{task}/pc/{index}.npy', allow_pickle = True)
-    seg = np.load(f'../../dexartEnv/assets/data/{task}/seg/{index}.npy',allow_pickle=True)
+    backbone = PointNetSegBackbone()
+    model = PointNetSeg(backbone, num_classes=4)
+    model_state_dict = torch.load('/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/fullModel.pth') 
+    model.load_state_dict(model_state_dict)    
+    
+    dataset = SemSegDataset(root_dir='/home/rustam/ProjectMy/artifacts/DataSeg/bucket', split='train')
+    print(len(dataset))
+    # idx = np.random.randint(0, len(dataset))
+    idx = 129
+    pc, label = dataset[idx]
+    points = pc.float().unsqueeze(0)
+    outputs = model(points)               # [B, N, 4]
+    outputs = outputs.permute(0, 2, 1)    # [B, 4, N]
 
-    mapping = {0:"bucket", 1:'faucet', 2:"laptop", 3: "toilet"}
-    output =pointNetCls(torch.from_numpy(row_pc).float().unsqueeze(0)) 
-    label = mapping[int(output.argmax(1))]
-    print(label)
-    origin, target, up, m44 = get_viewpoint_camera_parameter()
-    pc = visualize_segmented_pc(labels=seg, points=row_pc, use_seg=True)
+    preds = outputs.argmax(dim=1).squeeze()
+    colors = plt.get_cmap("tab20")(label / 4).reshape(-1, 4)
+    obs_cloud = o3d.geometry.PointCloud(points=o3d.utility.Vector3dVector(pc[..., 0:3]))
+    obs_cloud.colors = o3d.utility.Vector3dVector(colors[:, 0:3])
+    # draw the axis
     coordinate = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05, origin=[0, 0, 0])
-    o3d.visualization.draw_geometries([pc, coordinate], zoom=1,
-                                      front=origin - target,
-                                      lookat=target,
-                                      up=up)
-   
+
+    # o3d.visualization.draw_geometries([obs_cloud, coordinate])
+    # colors = plt.get_cmap("tab20")(preds / 4).reshape(-1, 4)
+    # obs_cloud = o3d.geometry.PointCloud(points=o3d.utility.Vector3dVector(pc[..., 0:3]))
+    # obs_cloud.colors = o3d.utility.Vector3dVector(colors[:, 0:3])
+    # # draw the axis
+    # coordinate = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05, origin=[0, 0, 0])
+
+    o3d.visualization.draw_geometries([obs_cloud, coordinate])
+    
     
 
    

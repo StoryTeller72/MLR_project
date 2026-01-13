@@ -29,7 +29,6 @@ if __name__ == "__main__":
         obs, reward, done, info = env.step(action)
         viewer.render()
 
-
     pc = visualize_observation(obs, use_seg=False, img_type='robot')
     coordinate = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05, origin=[0, 0, 0])
     o3d.visualization.draw_geometries([pc, coordinate], zoom=1,

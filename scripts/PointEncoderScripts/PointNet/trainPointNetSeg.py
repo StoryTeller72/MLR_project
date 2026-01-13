@@ -64,6 +64,13 @@ def train(model, train_loader, config):
     logs = []
 
     optimizer = optim.Adam(model.parameters(), lr=config['lr'])
+
+    scheduler = optim.lr_scheduler.StepLR(
+        optimizer,
+        step_size=config['lr_step'], 
+        gamma=config['lr_gamma']      
+    )
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
@@ -112,7 +119,12 @@ def train(model, train_loader, config):
                     f"Loss: {loss.item():.4f}"
                 )
         if epoch % config['save_step'] ==0 :
-            save(model,num_epochs, config)
+            save(model,epoch, config)
+
+        scheduler.step()
+
+        current_lr = scheduler.get_last_lr()[0]
+        print(f"  LR   : {current_lr:.6e}")
 
         metrics = compute_metrics(epoch_cm)
 
@@ -143,7 +155,7 @@ def train(model, train_loader, config):
 
 def save(model, epoch, config):
     print( f"{config['log_dir']}/{epoch}.pth")
-    torch.save(model.backbone, f"{config['log_dir']}/{epoch}.pth")
+    torch.save(model.backbone.state_dict(), f"{config['log_dir']}/{epoch}.pth")
 
 
 
@@ -164,7 +176,7 @@ if __name__ == '__main__':
     run = args.run
     use_img = args.use_img
     point_channel = 3
-    num_epochs = 20
+    num_epochs = 50
     config = {
         'num_epochs': num_epochs,
         'log_step': 10,
@@ -172,6 +184,8 @@ if __name__ == '__main__':
         'log_dir': '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg',
         'arch': arch,
         'lr': 1e-3,
+        'lr_step': 10,     # каждые 10 эпох
+        'lr_gamma': 0.5,   # lr *= 0.5
         'classes': 4,
         'save_step': 5,
         'cat': cat,
@@ -184,6 +198,7 @@ if __name__ == '__main__':
     backbone = PointNetSegBackbone()
     model = PointNetSeg(backbone, num_classes=4)
     logs = train(model, train_loader, config)
-    save_logs_json(logs, '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/logs.json')
+    torch.save(model.state_dict(), '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/fullModel.pth')
+    # save_logs_json(logs, '/home/rustam/ProjectMy/artifacts/Encoders/PointNetSeg/logs.json')
 
 
